@@ -1,0 +1,101 @@
+[
+    {
+        "id": 1,
+        "logo": "shop_img01.jpg",
+        "courseTitle": "SEO Tricks & Tips",
+        "category": "Art  Design",
+        "instructor": "Kiran Molly",
+        "price": "premium",
+        "language": "china",
+        "difficulty": "beginner",
+        "rating": "beginner"
+    },
+    {
+        "id": 2,
+        "logo": "shop_img02.jpg",
+        "courseTitle": "My Book Cover",
+        "category": "Data Science",
+        "instructor": "Jackson Alive",
+        "price": "premium",
+        "language": "spanish",
+        "difficulty": "intermediate",
+        "rating": "intermediate"
+    },
+    {
+        "id": 3,
+        "logo": "shop_img03.jpg",
+        "courseTitle": "Book Cover Design",
+        "category": "Business",
+        "instructor": "Oawe Alve",
+        "price": "premium",
+        "language": "china",
+        "difficulty": "intermediate",
+        "rating": "intermediate"
+    },
+    {
+        "id": 4,
+        "logo": "shop_img04.jpg",
+        "courseTitle": "EBook Cover Design",
+        "category": "Development",
+        "instructor": "Liakon Rivey",
+        "price": "premium",
+        "language": "spanish",
+        "difficulty": "beginner",
+        "rating": "beginner"
+    },
+    {
+        "id": 5,
+        "logo": "shop_img05.jpg",
+        "courseTitle": "Create An EBook Cover",
+        "category": "Finance",
+        "instructor": "Foley Patrik",
+        "price": "free",
+        "language": "spanish",
+        "difficulty": "expert",
+        "rating": "expert"
+    },
+    {
+        "id": 6,
+        "logo": "shop_img06.jpg",
+        "courseTitle": "A Million To One",
+        "category": "Data Science",
+        "instructor": "Jackson Alive",
+        "price": "premium",
+        "language": "china",
+        "difficulty": "intermediate",
+        "rating": "intermediate"
+    },
+    {
+        "id": 7,
+        "logo": "shop_img07.jpg",
+        "courseTitle": "The Hypocrite World",
+        "category": "Business",
+        "instructor": "Oawe Alve",
+        "price": "premium",
+        "language": "spanish",
+        "difficulty": "expert",
+        "rating": "expert"
+    },
+    {
+        "id": 8,
+        "logo": "shop_img08.jpg",
+        "courseTitle": "The Mind Of Leader",
+        "category": "Development",
+        "instructor": "Liakon Rivey",
+        "price": "premium",
+        "language": "china",
+        "difficulty": "beginner",
+        "rating": "beginner"
+    },
+    {
+        "id": 9,
+        "logo": "shop_img09.jpg",
+        "courseTitle": "The Book Of Art",
+        "category": "Finance",
+        "instructor": "Foley Patrik",
+        "price": "free",
+        "language": "spanish",
+        "difficulty": "intermediate",
+        "rating": "intermediate"
+    }
+]
