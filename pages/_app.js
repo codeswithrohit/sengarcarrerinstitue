@@ -110,7 +110,7 @@ function MyApp({ Component, pageProps }) {
         <>
             <Head>
                 {/* Primary Meta Tags */}
-                <title>Sengar Career Institute | Top JEE, NEET & Classes 9-12 Coaching in Varanasi</title>
+                <title>Sengar Career Institute | JEE, NEET & Classes 9-12 Coaching in Varanasi</title>
                 <meta name="title" content="Sengar Career Institute | Top JEE, NEET & Classes 9-12 Coaching in Varanasi" />
                 <meta 
                     name="description" 
