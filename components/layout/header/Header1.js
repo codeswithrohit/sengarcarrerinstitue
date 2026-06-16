@@ -24,7 +24,7 @@ export default function Header1({ scroll, isMobileMenu, handleMobileMenu }) {
   useEffect(() => {
     const fetchNotes = async () => {
       try {
-        const snapshot = await firebase.firestore().collection('notes').orderBy('createdAt', 'desc').get();
+        const snapshot = await firebase.firestore().collection('sengarcarrernotes').orderBy('createdAt', 'desc').get();
         const notesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setNotes(notesData);
       } catch (error) {

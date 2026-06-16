@@ -23,24 +23,24 @@ export default function Home1({courses,loading}) {
 
   return (
     <>
-      {loading ? (
+      {/* {loading ? (
         <Preloader />
       ) : (
         <Layout headerStyle={1} footerStyle={1}>
           <Hero/>
-          {/* <Banner1 /> */}
-          {/* <About1 /> */}
-          <Course1 courses={courses} />
+  
           <WhyChooseus/>
           <Testimonial/>
-          {/* <Categories2 /> */}
-          {/* <Testimonial1 /> */}
-          {/* <Mentors1 /> */}
-          {/* <Cta1 /> */}
-          {/* <Blog1 /> */}
-          {/* <Newsletter1 /> */}
+   
         </Layout>
-      )}
+      )} */}
+           <Layout headerStyle={1} footerStyle={1}>
+          <Hero/>
+  
+          <WhyChooseus/>
+          <Testimonial/>
+   
+        </Layout>
     </>
   );
 }

@@ -63,7 +63,7 @@ const TopicCard = ({ topic, topicIndex, chapter, activeClass, activeSubject, cur
         const fetchProgress = async () => {
             try {
                 const db = firebase.firestore();
-                const ref = doc(db, 'videoProgress', `${currentUserId}_${videoId}`);
+                const ref = doc(db, 'sengarcarrervideoProgress', `${currentUserId}_${videoId}`);
                 const docSnap = await getDoc(ref);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
@@ -87,7 +87,7 @@ const TopicCard = ({ topic, topicIndex, chapter, activeClass, activeSubject, cur
         if (!currentUserId || !videoId) return;
         try {
             const db = firebase.firestore();
-            const ref = doc(db, 'videoProgress', `${currentUserId}_${videoId}`);
+            const ref = doc(db, 'sengarcarrervideoProgress', `${currentUserId}_${videoId}`);
             await setDoc(ref, {
                 userId: currentUserId,
                 videoId,
@@ -234,7 +234,7 @@ const HomeYoutube = () => {
             try {
                 const db = firebase.firestore();
                 // Fetch Lectures
-                const lSnap = await getDocs(collection(db, 'lectures'));
+                const lSnap = await getDocs(collection(db, 'sengarcarrerlectures'));
                 const lData = lSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 setLecture(lData);
                 if (lData.length > 0) {
@@ -251,7 +251,7 @@ const HomeYoutube = () => {
         if (!currentUserId) return;
         const fetchResults = async () => {
             const db = firebase.firestore();
-            const qSnap = await getDocs(collection(db, 'yttestseriesresult'));
+            const qSnap = await getDocs(collection(db, 'sengarcarreryttestseriesresult'));
             const results = qSnap.docs
                 .map(d => ({ id: d.id, ...d.data() }))
                 .filter(res => res.userId === currentUserId);

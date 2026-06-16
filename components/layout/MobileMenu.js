@@ -22,7 +22,7 @@ export default function MobileMenu() {
         const fetchLectures = async () => {
           try {
             const db = firebase.firestore();
-            const lecturesRef = db.collection('lectures');
+            const lecturesRef = db.collection('sengarcarrerlectures');
             const snapshot = await lecturesRef.get();
             const lecturesData = snapshot.docs.map(doc => ({
               id: doc.id,
@@ -41,7 +41,7 @@ export default function MobileMenu() {
     useEffect(() => {
         const fetchNotes = async () => {
             try {
-                const snapshot = await firebase.firestore().collection('notes').orderBy('createdAt', 'desc').get();
+                const snapshot = await firebase.firestore().collection('sengarcarrernotes').orderBy('createdAt', 'desc').get();
                 const notesData = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()

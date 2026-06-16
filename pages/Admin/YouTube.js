@@ -4,7 +4,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import { useRouter } from 'next/router';
 import 'react-toastify/dist/ReactToastify.css';
 import AdminNav from '@/components/AdminNav';
-import { FiChevronDown, FiChevronUp, FiPlus, FiEdit2, FiTrash2, FiVideo, FiBarChart2, FiX,FiClock,FiCheckCircle } from 'react-icons/fi';
+import { FiChevronDown, FiChevronUp, FiPlus, FiEdit2, FiTrash2, FiVideo, FiBarChart2, FiX,FiClock,FiCheckCircle,FiLock } from 'react-icons/fi';
 import { FaYoutube } from 'react-icons/fa';
 const YouTube = () => {
   const router = useRouter();
@@ -41,7 +41,7 @@ const YouTube = () => {
     const fetchLectures = async () => {
       try {
         const db = firebase.firestore();
-        const lecturesRef = db.collection('lectures');
+        const lecturesRef = db.collection('sengarcarrerlectures');
         const snapshot = await lecturesRef.get();
         const lecturesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setLectures(lecturesData);
@@ -69,7 +69,7 @@ const YouTube = () => {
     try {
       const db = firebase.firestore();
       // 1. Fetch progress logs for this specific video
-      const progressSnap = await db.collection('videoProgress')
+      const progressSnap = await db.collection('sengarcarrervideoProgress')
         .where('videoId', '==', videoId)
         .get();
 
@@ -137,7 +137,7 @@ const YouTube = () => {
       const db = firebase.firestore();
       const lectureData = { ...formData };
       if (editingId) {
-        await db.collection('lectures').doc(editingId).update(lectureData);
+        await db.collection('sengarcarrerlectures').doc(editingId).update(lectureData);
         toast.success('Lecture updated successfully!');
       } else {
         await db.collection('lectures').add(lectureData);
@@ -163,13 +163,13 @@ const YouTube = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this lecture?')) {
       try {
-        await firebase.firestore().collection('lectures').doc(id).delete();
+        await firebase.firestore().collection('sengarcarrerlectures').doc(id).delete();
         toast.success('Lecture deleted successfully!');
         setLectures(prev => prev.filter(l => l.id !== id));
       } catch (error) { toast.error('Error deleting lecture'); }
     }
   };
-
+console.log("selectedprogressreport",topicProgressData)
   const handleAddTestToTopic = (lecture, topic) => {
     const queryParams = new URLSearchParams({
       lectureId: lecture.id, class: lecture.class, subject: lecture.subject, chapter: lecture.chapter, topicName: topic.name, autoOpen: 'true'
@@ -285,36 +285,53 @@ const YouTube = () => {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
-                  <table className="min-w-full text-left border-collapse whitespace-nowrap">
-                    <thead>
-                      <tr className="bg-slate-50 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
-                        <th className="px-4 py-3">Student Name</th>
-                        <th className="px-4 py-3">Student ID</th>
-                        <th className="px-4 py-3">Mobile</th>
-                        <th className="px-4 py-3 text-center">Seconds Watched</th>
-                        <th className="px-4 py-3 text-center">Progress %</th>
-                        <th className="px-4 py-3 text-center">Test Unlocked</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white text-sm font-semibold text-slate-700">
-                      {topicProgressData.map((log, i) => (
-                        <tr key={i} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 font-bold text-slate-900">{i+1}. {log.studentName}</td>
-                          <td className="px-4 py-3 text-slate-500">{log.studentId}</td>
-                          <td className="px-4 py-3 text-slate-500">{log.mobile}</td>
-                          <td className="px-4 py-3 text-center">{log.watchedSeconds}s</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`px-2.5 py-1 rounded-md text-xs font-black ${log.percentage >= 90 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {Math.floor(log.percentage)}%
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {log.unlocked ? <span className="text-emerald-500 font-bold flex justify-center items-center gap-1"><FiCheckCircle /> Yes</span> : <span className="text-slate-400 font-bold flex justify-center items-center gap-1"><FiLock /> No</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <table className="min-w-full text-left border-collapse whitespace-nowrap">
+  <thead>
+    <tr className="bg-slate-50 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
+      <th className="px-4 py-3">Student Name</th>
+      <th className="px-4 py-3">Student ID</th>
+      <th className="px-4 py-3">Mobile</th>
+      <th className="px-4 py-3 text-center">Seconds Watched</th>
+      <th className="px-4 py-3 text-center">Progress %</th>
+      <th className="px-4 py-3 text-center">Test Unlocked</th>
+      {/* NEW: Added Last Updated Column Header */}
+      <th className="px-4 py-3 text-center">Last Updated</th> 
+    </tr>
+  </thead>
+  <tbody className="divide-y divide-slate-100 bg-white text-sm font-semibold text-slate-700">
+    {topicProgressData.map((log, i) => (
+      <tr key={i} className="hover:bg-slate-50 transition-colors">
+        <td className="px-4 py-3 font-bold text-slate-900">{i+1}. {log.studentName}</td>
+        <td className="px-4 py-3 text-slate-500">{log.studentId}</td>
+        <td className="px-4 py-3 text-slate-500">{log.mobile}</td>
+        <td className="px-4 py-3 text-center">{log.watchedSeconds}s</td>
+        <td className="px-4 py-3 text-center">
+          <span className={`px-2.5 py-1 rounded-md text-xs font-black ${log.percentage >= 90 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+            {Math.floor(log.percentage)}%
+          </span>
+        </td>
+        <td className="px-4 py-3 text-center">
+          {log.unlocked ? <span className="text-emerald-500 font-bold flex justify-center items-center gap-1"><FiCheckCircle /> Yes</span> : <span className="text-slate-400 font-bold flex justify-center items-center gap-1"><FiLock /> No</span>}
+        </td>
+        {/* NEW: Formatting and displaying the Firestore Timestamp */}
+        <td className="px-4 py-3 text-center text-xs text-slate-500">
+          {log.lastUpdated?.seconds ? (
+            new Date(log.lastUpdated.seconds * 1000).toLocaleString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            })
+          ) : (
+            'N/A'
+          )}
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
                 </div>
               )}
             </div>

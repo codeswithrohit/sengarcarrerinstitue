@@ -1,9 +1,17 @@
 import AdminNav from '@/components/AdminNav'
 import React, { useState, useEffect } from 'react';
 import { firebase } from '../../Firebase/config';
+import { useRouter } from 'next/router';
 import { FiChevronDown, FiChevronUp, FiDollarSign, FiCalendar, FiCreditCard, FiCheckCircle, FiXCircle, FiEye, FiEyeOff, FiPrinter, FiX, FiShare2 } from 'react-icons/fi';
 
 const Fees = () => {
+    const router = useRouter();
+
+    // --- AUTHENTICATION & PERMISSIONS STATE ---
+    const [adminUser, setAdminUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+
+    // --- DATA STATE ---
     const [students, setStudents] = useState([]);
     const [expandedStudent, setExpandedStudent] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -11,10 +19,62 @@ const Fees = () => {
     const [showReceipt, setShowReceipt] = useState(false);
     const [sendStatus, setSendStatus] = useState({ success: false, message: '' });
 
+    // --- CHECK AUTHENTICATION & FETCH LIVE PERMISSIONS ---
     useEffect(() => {
+        const unsubscribe = firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                // Not logged in via Firebase Auth
+                router.push('/Admin/login');
+                return;
+            }
+
+            try {
+                const db = firebase.firestore();
+                // Fetch the corresponding admin user document from Firestore to get Live Permissions
+                const adminSnapshot = await db.collection('sengarcarreradminUsers')
+                    .where('email', '==', user.email)
+                    .get();
+
+                if (adminSnapshot.empty) {
+                    await firebase.auth().signOut();
+                    router.push('/Admin/login');
+                    return;
+                }
+
+                const adminData = adminSnapshot.docs[0].data();
+
+                // Check if the admin is verified
+                if (adminData.isVerified !== true) {
+                    await firebase.auth().signOut();
+                    router.push('/Admin/login');
+                    return;
+                }
+
+                // Store live permissions in state
+                setAdminUser({ id: adminSnapshot.docs[0].id, ...adminData });
+                setAuthLoading(false);
+
+            } catch (error) {
+                console.error("Authorization check error:", error);
+                await firebase.auth().signOut();
+                router.push('/Admin/login');
+            }
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
+    }, [router]);
+
+    // --- FETCH FEES DATA (ONLY IF AUTHORIZED) ---
+    useEffect(() => {
+        // Only fetch if authenticated and they have fees view access
+        if (authLoading || !adminUser || !adminUser.viewFees) {
+            return;
+        }
+
         const fetchStudents = async () => {
             try {
-                const snapshot = await firebase.firestore().collection('admissions').orderBy('createdAt', 'desc').get();
+                const snapshot = await firebase.firestore().collection('sengarcarreradmissions').orderBy('createdAt', 'desc').get();
                 const studentsData = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
@@ -26,7 +86,7 @@ const Fees = () => {
         };
 
         fetchStudents();
-    }, []);
+    }, [authLoading, adminUser]);
 
     const toggleInstallments = (studentId) => {
         if (expandedStudent === studentId) {
@@ -110,7 +170,7 @@ const Fees = () => {
             };
 
             // Update the student document in Firestore
-            await firebase.firestore().collection('admissions').doc(studentId).update({
+            await firebase.firestore().collection('sengarcarreradmissions').doc(studentId).update({
                 'fees.installments': updatedInstallments
             });
 
@@ -134,10 +194,19 @@ const Fees = () => {
 
     const generateReceipt = (student, installment) => {
         const feesSummary = calculateFeesSummary(student.fees);
+        
+        // Handle Firebase Timestamp or standard date string for joining date
+        let joinDateFormatted = 'N/A';
+        if (student.createdAt) {
+            const dateObj = student.createdAt.seconds ? new Date(student.createdAt.seconds * 1000) : student.createdAt;
+            joinDateFormatted = formatDate(dateObj);
+        }
+
         const receipt = {
             studentName: student.name,
             studentId: student.studentid,
             mobile: student.mobileNumber,
+            joinDate: joinDateFormatted, // Added Join Date
             installmentNumber: installment.number,
             installmentAmount: installment.amount,
             installmentDate: formatDate(installment.date),
@@ -161,7 +230,6 @@ const Fees = () => {
         window.location.reload();
     };
 
-    // --- MODIFIED: Text-only WhatsApp Sender ---
     const sendReceiptViaWhatsApp = () => {
         // 1. Check if we have the data
         if (!receiptData || !receiptData.mobile) {
@@ -177,14 +245,17 @@ const Fees = () => {
                 phone = '91' + phone; // Add India code if missing
             }
 
-            // 3. Create a simpler message string (Standard emojis often work better with this API)
+            // 3. Create a simpler message string with Join Date included
             const message = `Dear *${receiptData.studentName}*,
             
  *Payment Receipt Details*
 --------------------------------
+ *Student ID*: ${receiptData.studentId}
+ *Join Date*: ${receiptData.joinDate}
+--------------------------------
  *Installment #${receiptData.installmentNumber}*: ₹${parseFloat(receiptData.installmentAmount).toLocaleString()}
  *Payment Mode*: ${receiptData.paymentMode}
-*Payment Date*: ${receiptData.paidDate}
+ *Payment Date*: ${receiptData.paidDate}
 --------------------------------
  *Total Paid*: ₹${parseFloat(receiptData.totalPaid).toLocaleString()}
  *Balance Due*: ₹${parseFloat(receiptData.totalUnpaid).toLocaleString()}
@@ -198,9 +269,6 @@ SAI COMPLEX, BENIPUR POKHRA, BENIPUR ROAD, PAHARIYA-221007
             // 4. Use the Universal WhatsApp API instead of wa.me
             const whatsappUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
             
-            // DEBUGGING: This will print the exact link in your browser console (Press F12 to see it)
-            console.log("GENERATED WHATSAPP LINK:", whatsappUrl);
-
             // 5. Bypass Popup Blockers by creating a temporary, invisible link
             const link = document.createElement('a');
             link.href = whatsappUrl;
@@ -217,6 +285,31 @@ SAI COMPLEX, BENIPUR POKHRA, BENIPUR ROAD, PAHARIYA-221007
             setSendStatus({ success: false, message: 'Failed to open WhatsApp' });
         }
     };
+
+    // --- RENDER LOADING STATE ---
+    if (authLoading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-700"></div>
+            </div>
+        );
+    }
+
+    // --- RENDER ACCESS DENIED STATE ---
+    if (!adminUser?.viewFees) {
+        return (
+            <div className="min-h-screen bg-gray-50 mb-36">
+                <AdminNav />
+                <div className="md:ml-64 px-4 py-8 flex flex-col items-center justify-center mt-20">
+                    <div className="bg-red-50 text-red-600 p-8 rounded-2xl border border-red-200 shadow-sm flex flex-col items-center max-w-md text-center">
+                        <FiXCircle className="h-12 w-12 mb-4 text-red-500" />
+                        <h2 className="text-xl font-black mb-2">Access Denied</h2>
+                        <p className="text-sm font-medium">You do not have permission to view the Fees module. Please contact a Super Admin.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 mb-36">
@@ -380,19 +473,33 @@ SAI COMPLEX, BENIPUR POKHRA, BENIPUR ROAD, PAHARIYA-221007
                                                                                     </td>
                                                                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                                                                         {installment.paid ? (
-                                                                                            <button
-                                                                                                onClick={() => generateReceipt(student, installment)}
-                                                                                                className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
-                                                                                            >
-                                                                                                View Receipt
-                                                                                            </button>
+                                                                                            <div className="flex space-x-2">
+                                                                                                <button
+                                                                                                    onClick={() => generateReceipt(student, installment)}
+                                                                                                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+                                                                                                >
+                                                                                                    View Receipt
+                                                                                                </button>
+                                                                                                {/* Render Mark Unpaid ONLY if admin has permission */}
+                                                                                                {adminUser?.feesMarkUnpaidAccess && (
+                                                                                                    <button
+                                                                                                        onClick={() => updateInstallmentStatus(student.id, index)}
+                                                                                                        className="px-3 py-1 bg-red-100 text-red-800 rounded-md text-sm font-medium hover:bg-red-200"
+                                                                                                    >
+                                                                                                        Mark Unpaid
+                                                                                                    </button>
+                                                                                                )}
+                                                                                            </div>
                                                                                         ) : (
-                                                                                            <button
-                                                                                                onClick={() => updateInstallmentStatus(student.id, index)}
-                                                                                                className="px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm font-medium hover:bg-blue-200"
-                                                                                            >
-                                                                                                Mark as Paid
-                                                                                            </button>
+                                                                                            // Render Mark as Paid ONLY if admin has permission
+                                                                                            adminUser?.feesPaidAccess && (
+                                                                                                <button
+                                                                                                    onClick={() => updateInstallmentStatus(student.id, index)}
+                                                                                                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm font-medium hover:bg-blue-200"
+                                                                                                >
+                                                                                                    Mark as Paid
+                                                                                                </button>
+                                                                                            )
                                                                                         )}
                                                                                     </td>
                                                                                 </tr>
@@ -435,7 +542,7 @@ SAI COMPLEX, BENIPUR POKHRA, BENIPUR ROAD, PAHARIYA-221007
                                         <img className="w-full h-full object-contain" src='/logo.jpeg' alt="Logo" />
                                     </div>
                                     <h1 className="text-xl font-bold text-gray-800">Sengar Carrer Institute</h1>
-                                    <p className="text-sm text-gray-500">त्रिबंधु's Nurtue Nature & Future</p>
+                         
                                 </div>
                                 
                                 {/* Transaction Summary Card */}
@@ -459,6 +566,10 @@ SAI COMPLEX, BENIPUR POKHRA, BENIPUR ROAD, PAHARIYA-221007
                                         <div className="flex justify-between">
                                             <span className="text-gray-600">Mobile</span>
                                             <span className="font-medium">{receiptData.mobile}</span>
+                                        </div>
+                                        <div className="flex justify-between border-t border-gray-200 pt-2">
+                                            <span className="text-gray-600">Join Date</span>
+                                            <span className="font-medium">{receiptData.joinDate}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -527,7 +638,7 @@ SAI COMPLEX, BENIPUR POKHRA, BENIPUR ROAD, PAHARIYA-221007
                                 
                                 {/* Footer */}
                                 <div className="text-center text-xs text-gray-500">
-                                    <p>For any queries, contact us at 98076 78581</p>
+                                    <p>For any queries, contact us at +91 8127140804</p>
                                     <p className="mt-1">PANCHKOSHI RD, JAI NAGAR COLONY, GILAT BAZAR, VARANASI, UTTAR PRADESH 221002</p>
                                 </div>
                             </div>

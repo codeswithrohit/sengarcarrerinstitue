@@ -21,7 +21,7 @@ const Notes = () => {
   useEffect(() => {
     const fetchNotes = async () => {
       try {
-        const snapshot = await firebase.firestore().collection('notes').orderBy('createdAt', 'desc').get();
+        const snapshot = await firebase.firestore().collection('sengarcarrernotes').orderBy('createdAt', 'desc').get();
         const notesData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -106,7 +106,7 @@ const Notes = () => {
         }
 
         // Then delete the document from Firestore
-        await firebase.firestore().collection('notes').doc(noteId).delete();
+        await firebase.firestore().collection('sengarcarrernotes').doc(noteId).delete();
 
         // Update local state
         setNotes(prev => prev.filter(note => note.id !== noteId));
@@ -168,7 +168,7 @@ const Notes = () => {
 
       if (editingNote) {
         // Update existing note
-        await firebase.firestore().collection('notes').doc(editingNote.id).update({
+        await firebase.firestore().collection('sengarcarrernotes').doc(editingNote.id).update({
           classLevel: formData.classLevel,
           subject: formData.subject,
           publication: formData.publication,
@@ -190,7 +190,7 @@ const Notes = () => {
         alert('Note updated successfully!');
       } else {
         // Create new note
-        const docRef = await firebase.firestore().collection('notes').add({
+        const docRef = await firebase.firestore().collection('sengarcarrernotes').add({
           classLevel: formData.classLevel,
           subject: formData.subject,
           publication: formData.publication,

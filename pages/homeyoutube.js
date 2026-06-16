@@ -20,7 +20,7 @@ const HomeYoutube = () => {
             
             try {
                 const db = firebase.firestore();
-                const lectureRef = collection(db, 'lectures');
+                const lectureRef = collection(db, 'sengarcarrerlectures');
                 const q = query(
                     lectureRef,
                     where('class', '==', classLevel),

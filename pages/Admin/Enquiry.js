@@ -10,7 +10,7 @@ const Enquiry = () => {
     const fetchEnquiries = async () => {
       try {
         const db = firebase.firestore();
-        const querySnapshot = await db.collection('enquiries')
+        const querySnapshot = await db.collection('sengarcarrerenquiries')
           .orderBy('createdAt', 'desc') // Sort by createdAt in descending order
           .get();
         const enquiriesData = [];

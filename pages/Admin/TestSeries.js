@@ -22,11 +22,6 @@ const getTargetClassOptions = (program) => {
       { value: 'Target 12th+ NEET', label: '12th+ NEET' },
       { value: 'Target 12th+ IIT JEE', label: '12th+ IIT JEE' }
     ];
-    case 'Pre Foundation': return [
-      { value: `${program} 8th`, label: '8th' },
-      { value: `${program} 9th`, label: '9th' },
-      { value: `${program} 10th`, label: '10th' },
-    ];
     case 'Foundation': return [
       { value: 'Foundation 11th NEET', label: '11th NEET' },
       { value: 'Foundation 11th IIT JEE', label: '11th IIT JEE' },
@@ -66,17 +61,22 @@ const TestSeries = () => {
   const [resultSort, setResultSort] = useState('highest'); 
   const [detailedStudentResult, setDetailedStudentResult] = useState(null);
   const [viewAttemptIndex, setViewAttemptIndex] = useState(0);
-
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  const [resultPages, setResultPages] = useState({});
+  const resultItemsPerPage = 8;
   // Form state - Added testType
   const [formData, setFormData] = useState({
     admissionFor: '',
-    targetClass: [], // Multiselect array
+    targetClass: [],
     subject: '',
     chapter: '',
     testName: '',
-    testType: '', // <--- ADDED TEST TYPE
+    testType: '',
     status: 'Draft',
-    testTime: '',
+    testTime: '', // duration in minutes
+    testStartTime: '', // NEW: start time like 10:30
     date: new Date().toISOString().split('T')[0],
     tests: [{
       question: '',
@@ -94,20 +94,26 @@ const TestSeries = () => {
   useEffect(() => {
     const fetchTestSeries = async () => {
       try {
+        setLoading(true);
+  
         const db = firebase.firestore();
-        const testsRef = db.collection('testSeries');
+        const testsRef = db.collection('sengarcarrertestSeries')
         const snapshot = await testsRef.get();
+  
         const testsData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
+  
         setTestSeries(testsData);
       } catch (error) {
         toast.error('Failed to fetch test series');
         console.error('Error fetching test series:', error);
+      } finally {
+        setLoading(false);
       }
     };
-
+  
     fetchTestSeries();
   }, []);
 
@@ -115,19 +121,21 @@ const TestSeries = () => {
     const fetchTestSeriesresult = async () => {
       try {
         const db = firebase.firestore();
-        const testsRef = db.collection('testseriesresult');
+        const testsRef = db.collection('sengarcarrertestseriesresult');
         const snapshot = await testsRef.get();
+  
         const testsData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
+  
         setTestSeriesresult(testsData);
       } catch (error) {
         toast.error('Failed to fetch test series results');
         console.error('Error fetching test series results:', error);
       }
     };
-
+  
     fetchTestSeriesresult();
   }, []);
 
@@ -157,7 +165,16 @@ const TestSeries = () => {
   }))].filter(Boolean);
   
   const uniqueSubjects = [...new Set(testSeries.map(t => t.subject))].filter(Boolean);
+  const totalPages = Math.ceil(filteredTestSeries.length / itemsPerPage);
 
+  const paginatedTestSeries = filteredTestSeries.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterProgram, filterTargetClass, filterSubject, filterStatus, itemsPerPage]);
   // Toggle test expansion
   const toggleTestExpansion = (testId) => {
     setExpandedTests(prev => ({ ...prev, [testId]: !prev[testId] }));
@@ -303,12 +320,28 @@ const TestSeries = () => {
 
   const resetForm = () => {
     setFormData({
-      admissionFor: '', targetClass: [], subject: '', chapter: '', status: 'Draft', testName: '', testType: '', testTime: '', date: new Date().toISOString().split('T')[0],
+      admissionFor: '',
+      targetClass: [],
+      subject: '',
+      chapter: '',
+      status: 'Draft',
+      testName: '',
+      testType: '',
+      testTime: '',
+      testStartTime: '',
+      date: new Date().toISOString().split('T')[0],
       tests: [{
-        question: '', topic: '', difficulty: 'Medium', questionImage: null,
-        options: ['', '', '', ''], correctOption: 0, description: '', descriptionImage: null
+        question: '',
+        topic: '',
+        difficulty: 'Medium',
+        questionImage: null,
+        options: ['', '', '', ''],
+        correctOption: 0,
+        description: '',
+        descriptionImage: null
       }]
     });
+  
     setEditingId(null);
   };
 
@@ -328,18 +361,31 @@ const TestSeries = () => {
       const finalStatus = typeof status === 'string' ? status : 'Published';
 
       const testData = {
-        admissionFor: formData.admissionFor, 
+        admissionFor: formData.admissionFor,
         targetClass: formData.targetClass,
-        class: formData.targetClass.join(', '), // Backup comma-separated string
-        status: finalStatus, 
-        subject: formData.subject, 
+        class: formData.targetClass.join(', '),
+      
+        status: finalStatus,
+        subject: formData.subject,
         chapter: formData.chapter,
-        testName: formData.testName, 
-        testType: formData.testType, // <--- SAVING TEST TYPE
-        testTime: formData.testTime, 
-        date: formData.date, 
+        testName: formData.testName,
+        testType: formData.testType,
+      
+        testTime: formData.testTime, // duration
+        testStartTime: formData.testStartTime, // NEW start time
+        date: formData.date,
+      
+        // Useful combined field for sorting/display
+        testDateTime: formData.date && formData.testStartTime
+          ? `${formData.date}T${formData.testStartTime}`
+          : '',
+      
         tests: formData.tests,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        ...(editingId ? {} : {
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        })
       };
       
       if (editingId) {
@@ -350,8 +396,12 @@ const TestSeries = () => {
         toast.success(`Test saved as ${finalStatus}!`);
       }
       
-      const snapshot = await db.collection('testSeries').get();
-      setTestSeries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const snapshot = await db.collection('testSeries').orderBy('createdAt', 'desc').get();
+
+      setTestSeries(snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })));
       setShowPopup(false);
       resetForm();
     } catch (error) {
@@ -365,18 +415,27 @@ const TestSeries = () => {
     setFormData({
       admissionFor: test.admissionFor || '',
       targetClass: test.targetClass || (test.class ? test.class.split(',').map(c => c.trim()) : []),
-      subject: test.subject, 
-      chapter: test.chapter, 
-      status: test.status,
-      testName: test.testName, 
-      testType: test.testType || '', // <--- LOADING TEST TYPE
-      testTime: test.testTime, 
+      subject: test.subject || '',
+      chapter: test.chapter || '',
+      status: test.status || 'Draft',
+      testName: test.testName || '',
+      testType: test.testType || '',
+      testTime: test.testTime || '',
+      testStartTime: test.testStartTime || '',
       date: test.date || new Date().toISOString().split('T')[0],
       tests: test.tests?.length > 0 ? test.tests.map(t => ({
-        ...t, topic: t.topic || '', difficulty: t.difficulty || 'Medium'
+        ...t,
+        topic: t.topic || '',
+        difficulty: t.difficulty || 'Medium'
       })) : [{
-        question: '', topic: '', difficulty: 'Medium', questionImage: null,
-        options: ['', '', '', ''], correctOption: 0, description: '', descriptionImage: null
+        question: '',
+        topic: '',
+        difficulty: 'Medium',
+        questionImage: null,
+        options: ['', '', '', ''],
+        correctOption: 0,
+        description: '',
+        descriptionImage: null
       }]
     });
     setEditingId(test.id);
@@ -387,7 +446,7 @@ const TestSeries = () => {
     if (window.confirm('Are you sure you want to delete this test?')) {
       try {
         const db = firebase.firestore();
-        await db.collection('testSeries').doc(id).delete();
+        await db.collection('sengarcarrertestSeries').doc(id).delete();
         toast.success('Test deleted successfully!');
         const snapshot = await db.collection('testSeries').get();
         setTestSeries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -428,10 +487,9 @@ const TestSeries = () => {
               }}
             >
               <option value="">All Programs</option>
-              <option value="Pre Foundation">Pre Foundation Program</option>
               <option value="Foundation">Foundation Program</option>
               <option value="Target">Target (12th+)</option>
-              {/* <option value="School With Foundation">School With Foundation</option> */}
+              <option value="School With Foundation">School With Foundation</option>
               <option value="Board Batch">Board Batch</option>
             </select>
 
@@ -512,7 +570,7 @@ const TestSeries = () => {
             </td>
           </tr>
         ) : (
-          filteredTestSeries.map((test, index) => {
+          paginatedTestSeries.map((test, index) => {
             const rawTestResults = getResultsForTest(test.id);
 
             // PROCESS RESULTS FOR DASHBOARD
@@ -565,7 +623,7 @@ const TestSeries = () => {
               <React.Fragment key={test.id}>
                 <tr className="hover:bg-gray-50 group">
                   <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-indigo-700">
-                    {index + 1}. {test.admissionFor || 'N/A'}/{displayClasses}
+                  {(currentPage - 1) * itemsPerPage + index + 1}. {test.admissionFor || 'N/A'}/{displayClasses}
                   </td>
 
                   <td className="px-2 py-1.5 whitespace-nowrap text-xs text-gray-600">
@@ -579,7 +637,12 @@ const TestSeries = () => {
                   </td>
                   
                   <td className="px-2 py-1.5 whitespace-nowrap text-xs text-gray-600">
-                    {test.date} | {test.testTime}m<br />
+                  <div className="font-semibold text-gray-700">
+  {test.date || 'No Date'}
+</div>
+<div className="text-[10px] text-gray-500">
+  Start: {test.testStartTime || 'N/A'} | Duration: {test.testTime || 0}m
+</div>
                     <span className={`inline-block mt-0.5 px-1.5 py-0.5 text-[9px] rounded font-bold ${test.status === 'Published' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                       {test.status || 'Draft'}
                     </span>
@@ -794,6 +857,57 @@ const TestSeries = () => {
     </table>
   </div>
 </div>
+<div className="flex flex-col sm:flex-row justify-between items-center gap-3 px-3 py-3 border-t border-gray-200 bg-gray-50">
+  <div className="text-xs text-gray-600">
+    Showing{' '}
+    <span className="font-bold">
+      {filteredTestSeries.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
+    </span>
+    {' '}to{' '}
+    <span className="font-bold">
+      {Math.min(currentPage * itemsPerPage, filteredTestSeries.length)}
+    </span>
+    {' '}of{' '}
+    <span className="font-bold">{filteredTestSeries.length}</span>
+    {' '}tests
+  </div>
+
+  <div className="flex items-center gap-2">
+    <select
+      value={itemsPerPage}
+      onChange={(e) => {
+        setItemsPerPage(Number(e.target.value));
+        setCurrentPage(1);
+      }}
+      className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+    >
+      <option value={5}>5 / page</option>
+      <option value={10}>10 / page</option>
+      <option value={20}>20 / page</option>
+      <option value={50}>50 / page</option>
+    </select>
+
+    <button
+      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+      disabled={currentPage === 1}
+      className="px-3 py-1 text-xs rounded border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100"
+    >
+      Prev
+    </button>
+
+    <span className="text-xs font-semibold text-gray-700">
+      Page {currentPage} of {totalPages || 1}
+    </span>
+
+    <button
+      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+      disabled={currentPage === totalPages || totalPages === 0}
+      className="px-3 py-1 text-xs rounded border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100"
+    >
+      Next
+    </button>
+  </div>
+</div>
       </div>
 
       {/* Add/Edit Test Popup */}
@@ -828,7 +942,7 @@ const TestSeries = () => {
                           <option value="">-- Select Program --</option>
                           <option value="Foundation">Foundation Program</option>
                           <option value="Target">Target (12th+)</option>
-                          {/* <option value="School With Foundation">School With Foundation</option> */}
+                          <option value="School With Foundation">School With Foundation</option>
                           <option value="Board Batch">Board Batch</option>
                         </select>
                       </div>
@@ -888,7 +1002,7 @@ const TestSeries = () => {
                       <input type="text" name="testName" value={formData.testName} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Enter test name" required />
                     </div>
 
-                    {/* NEW FIELD: Test Type */}
+                    {/* FIELD MODIFIED: Test Type */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Test Type <span className="text-red-500">*</span></label>
                       <select 
@@ -904,6 +1018,8 @@ const TestSeries = () => {
                         <option value="15 Days Test">15 Days Test</option>
                         <option value="Monthly">Monthly</option>
                         <option value="Combined">Combined</option>
+                        <option value="Progress Test">Progress Test</option>
+                        <option value="One Time Test">One Time Test</option>
                       </select>
                     </div>
 
@@ -911,11 +1027,33 @@ const TestSeries = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Test Duration (minutes)</label>
                       <input type="number" name="testTime" value={formData.testTime} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Enter test duration" required />
                     </div>
-
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                      <input type="date" name="date" value={formData.date} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required />
-                    </div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Test Date
+  </label>
+  <input
+    type="date"
+    name="date"
+    value={formData.date}
+    onChange={handleInputChange}
+    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+    required
+  />
+</div>
+
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Test Start Time
+  </label>
+  <input
+    type="time"
+    name="testStartTime"
+    value={formData.testStartTime}
+    onChange={handleInputChange}
+    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+    required
+  />
+</div>
                   </div>
 
                   {/* Excel Upload Section */}

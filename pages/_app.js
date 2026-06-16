@@ -45,27 +45,27 @@ const CustomPreloader = () => {
 };
 
 function MyApp({ Component, pageProps }) {
-    const [loading, setLoading] = useState(true)
-    const [courses, setCourses] = useState([]);
+    // const [loading, setLoading] = useState(true)
+    // const [courses, setCourses] = useState([]);
   
-    useEffect(() => {
-      const fetchCourses = async () => {
-        try {
-          const snapshot = await firebase.firestore().collection("courses").get();
-          const courseData = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          setCourses(courseData);
-        } catch (error) {
-          console.error("Error fetching courses: " + error.message);
-        } finally {
-          setLoading(false);
-        }
-      };
+    // useEffect(() => {
+    //   const fetchCourses = async () => {
+    //     try {
+    //       const snapshot = await firebase.firestore().collection("courses").get();
+    //       const courseData = snapshot.docs.map((doc) => ({
+    //         id: doc.id,
+    //         ...doc.data(),
+    //       }));
+    //       setCourses(courseData);
+    //     } catch (error) {
+    //       console.error("Error fetching courses: " + error.message);
+    //     } finally {
+    //       setLoading(false);
+    //     }
+    //   };
   
-      fetchCourses();
-    }, []);
+    //   fetchCourses();
+    // }, []);
 
     // JSON-LD Schema for Local Educational Organization
     const structuredData = {
@@ -142,13 +142,16 @@ function MyApp({ Component, pageProps }) {
                 />
             </Head>
 
-            {!loading ? (
+            {/* {!loading ? (
                 <Provider store={store}>
-                    <Component courses={courses} loading={loading} {...pageProps} />
+                    <Component  {...pageProps} />
                 </Provider>
             ) : (
                 <CustomPreloader />
-            )}
+            )} */}
+             <Provider store={store}>
+                    <Component  {...pageProps} />
+                </Provider>
         </>
     )
 }

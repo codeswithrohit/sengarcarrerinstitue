@@ -23,17 +23,17 @@ const Dashboard = () => {
         const db = firebase.firestore();
 
         // 1. Fetch Profile & Fees
-        const profileDoc = await db.collection('admissions').doc(user.uid).get();
+        const profileDoc = await db.collection('sengarcarreradmissions').doc(user.uid).get();
         if (profileDoc.exists) setStudentData(profileDoc.data());
 
         // 2. Fetch Regular Tests
-        const resultsSnapshot = await db.collection('testseriesresult').where('userId', '==', user.uid).get();
+        const resultsSnapshot = await db.collection('sengarcarrertestseriesresult').where('userId', '==', user.uid).get();
         const results = resultsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         results.sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
         setTestResults(results);
 
         // 3. Fetch YouTube Tests
-        const ytSnapshot = await db.collection('yttestseriesresult').where('userId', '==', user.uid).get();
+        const ytSnapshot = await db.collection('sengarcarreryttestseriesresult').where('userId', '==', user.uid).get();
         const ytResults = ytSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         ytResults.sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
         setYtTestResults(ytResults);

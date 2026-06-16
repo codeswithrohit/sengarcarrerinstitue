@@ -25,7 +25,7 @@ const Profile = () => {
           return;
         }
 
-        const doc = await firebase.firestore().collection('admissions').doc(user.uid).get();
+        const doc = await firebase.firestore().collection('sengarcarreradmissions').doc(user.uid).get();
         
         if (!doc.exists) {
           router.push('/');
@@ -58,7 +58,7 @@ const Profile = () => {
   const handleSave = async () => {
     try {
       const user = firebase.auth().currentUser;
-      await firebase.firestore().collection('admissions').doc(user.uid).update({
+      await firebase.firestore().collection('sengarcarreradmissions').doc(user.uid).update({
         ...editData,
         lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
       });

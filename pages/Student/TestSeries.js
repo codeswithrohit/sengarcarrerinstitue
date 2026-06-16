@@ -21,7 +21,7 @@ import {
 const TestSeries = () => {
   const [userData, setUserData] = useState(null);
   const router = useRouter();
-  const { class: classLevel, subject, chapter, topic,lectureId } = router.query;
+  const { class: classLevel, subject, chapter, topic, lectureId } = router.query;
   
   const [testSeries, setTestSeries] = useState([]);
   const [filteredTests, setFilteredTests] = useState([]);
@@ -49,7 +49,7 @@ const TestSeries = () => {
   useEffect(() => {
     const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
       if (user) {
-        firebase.firestore().collection('admissions').doc(user.uid).get()
+        firebase.firestore().collection('sengarcarreradmissions').doc(user.uid).get()
           .then((doc) => {
             if (doc.exists) {
               setUserData(doc.data());
@@ -79,7 +79,7 @@ const TestSeries = () => {
         setNoQuestionsLeft(false);
         
         // --- A. Fetch Main Question Bank ---
-        let query = firebase.firestore().collection('youtubetestseries');
+        let query = firebase.firestore().collection('sengarcarreryoutubetestseries');
         if (classLevel) query = query.where('class', '==', classLevel);
         if (subject) query = query.where('subject', '==', subject);
         if (chapter) query = query.where('chapter', '==', chapter);
@@ -92,7 +92,7 @@ const TestSeries = () => {
         }));
 
         // --- B. Fetch User's Previous Results for this specific test ---
-        const resultsSnap = await firebase.firestore().collection('yttestseriesresult')
+        const resultsSnap = await firebase.firestore().collection('sengarcarreryttestseriesresult')
           .where('userId', '==', firebase.auth().currentUser.uid)
           .where('class', '==', classLevel)
           .where('subject', '==', subject)
@@ -134,7 +134,6 @@ const TestSeries = () => {
             mainResultDoc.attempts.forEach(attempt => {
               if (attempt.testResults) {
                 attempt.testResults.forEach(tr => {
-                  // MODIFIED: Store a unique key combining Topic and Question text
                   if (tr.question) {
                     const topicKey = tr.topic || 'Uncategorized';
                     previouslySeenQuestions.add(`${topicKey}|${tr.question}`);
@@ -167,7 +166,6 @@ const TestSeries = () => {
               qTopic = qTopic || 'Uncategorized';
               qDiff = qDiff || 'Medium';
 
-              // Track how many questions of this specific topic and difficulty we need to replace
               const comboKey = `${qTopic}|${qDiff}`;
               if (!comboTracker[comboKey]) {
                 comboTracker[comboKey] = { topic: qTopic, difficulty: qDiff, count: 0 };
@@ -175,79 +173,81 @@ const TestSeries = () => {
               comboTracker[comboKey].count += 1;
             });
 
-            // Convert tracker object to an array for easier processing
             targetCombos = Object.values(comboTracker);
           }
         }
 
         setTestSeries(testData);
         
-        // --- D. Process and Filter Questions ---
+        // --- D. Process and Filter Questions based on Test Type ---
         if (testData.length > 0) {
           const filtered = testData.map(lecture => {
             const allQuestions = lecture.tests || [];
             let selectedQuestions = [];
 
-            if (isRetake && targetCombos.length > 0) {
-              // RETAKE LOGIC: Fetch the exact number of required questions for EACH topic & level
-              targetCombos.forEach(target => {
-                const matchingQuestions = allQuestions.filter(q => {
-                  const qTopic = q.topic || 'Uncategorized';
-                  const qDifficulty = ['Easy', 'Medium', 'Hard'].includes(q.difficulty) ? q.difficulty : 'Medium';
+            // ----- NEW LOGIC: Check Test Type -----
+            if (lecture.testType === 'Progress Test') {
+              // PROGRESS TEST LOGIC (Level-Wise Grouping & Retake System)
+              if (isRetake && targetCombos.length > 0) {
+                // RETAKE LOGIC
+                targetCombos.forEach(target => {
+                  const matchingQuestions = allQuestions.filter(q => {
+                    const qTopic = q.topic || 'Uncategorized';
+                    const qDifficulty = ['Easy', 'Medium', 'Hard'].includes(q.difficulty) ? q.difficulty : 'Medium';
+                    
+                    return (
+                      qTopic === target.topic && 
+                      qDifficulty === target.difficulty &&
+                      !previouslySeenQuestions.has(`${qTopic}|${q.question}`) && 
+                      !selectedQuestions.some(sq => sq.question === q.question && (sq.topic || 'Uncategorized') === qTopic)
+                    );
+                  });
                   
-                  return (
-                    qTopic === target.topic && 
-                    qDifficulty === target.difficulty &&
-                    // MODIFIED: Check against the unique combo of Topic + Question text
-                    !previouslySeenQuestions.has(`${qTopic}|${q.question}`) && 
-                    // MODIFIED: Ensure selected array doesn't have duplicate Topic + Question combo
-                    !selectedQuestions.some(sq => sq.question === q.question && (sq.topic || 'Uncategorized') === qTopic)
-                  );
-                });
-                
-                // Shuffle matching questions and slice the exact count we need
-                if (matchingQuestions.length > 0) {
-                  const shuffled = matchingQuestions.sort(() => 0.5 - Math.random());
-                  const questionsToTake = shuffled.slice(0, target.count);
-                  selectedQuestions.push(...questionsToTake);
-                }
-              });
-              
-              // MODIFIED: Final deduplication check using Topic + Question
-              selectedQuestions = selectedQuestions.filter((v, i, a) => {
-                const vTopic = v.topic || 'Uncategorized';
-                return a.findIndex(t => (t.question === v.question && (t.topic || 'Uncategorized') === vTopic)) === i;
-              });
-
-            } else {
-              // FIRST TIME LOGIC: 1 question from EACH level for EACH topic
-              const groupedQuestions = {};
-
-              allQuestions.forEach(q => {
-                const topic = q.topic || 'Uncategorized';
-                const level = ['Easy', 'Medium', 'Hard'].includes(q.difficulty) ? q.difficulty : 'Medium'; 
-                
-                if (!groupedQuestions[topic]) {
-                  groupedQuestions[topic] = { Easy: [], Medium: [], Hard: [] };
-                }
-                
-                groupedQuestions[topic][level].push(q);
-              });
-
-              Object.keys(groupedQuestions).forEach(topic => {
-                ['Easy', 'Medium', 'Hard'].forEach(level => {
-                  const availableQuestions = groupedQuestions[topic][level];
-                  
-                  if (availableQuestions.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * availableQuestions.length);
-                    selectedQuestions.push(availableQuestions[randomIndex]);
+                  if (matchingQuestions.length > 0) {
+                    const shuffled = matchingQuestions.sort(() => 0.5 - Math.random());
+                    const questionsToTake = shuffled.slice(0, target.count);
+                    selectedQuestions.push(...questionsToTake);
                   }
                 });
-              });
-            }
+                
+                selectedQuestions = selectedQuestions.filter((v, i, a) => {
+                  const vTopic = v.topic || 'Uncategorized';
+                  return a.findIndex(t => (t.question === v.question && (t.topic || 'Uncategorized') === vTopic)) === i;
+                });
 
-            if (!isRetake && selectedQuestions.length === 0 && allQuestions.length > 0) {
-              selectedQuestions = [allQuestions[0]]; 
+              } else {
+                // FIRST TIME LOGIC: 1 question from EACH level for EACH topic
+                const groupedQuestions = {};
+
+                allQuestions.forEach(q => {
+                  const topic = q.topic || 'Uncategorized';
+                  const level = ['Easy', 'Medium', 'Hard'].includes(q.difficulty) ? q.difficulty : 'Medium'; 
+                  
+                  if (!groupedQuestions[topic]) {
+                    groupedQuestions[topic] = { Easy: [], Medium: [], Hard: [] };
+                  }
+                  
+                  groupedQuestions[topic][level].push(q);
+                });
+
+                Object.keys(groupedQuestions).forEach(topic => {
+                  ['Easy', 'Medium', 'Hard'].forEach(level => {
+                    const availableQuestions = groupedQuestions[topic][level];
+                    
+                    if (availableQuestions.length > 0) {
+                      const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+                      selectedQuestions.push(availableQuestions[randomIndex]);
+                    }
+                  });
+                });
+              }
+
+              if (!isRetake && selectedQuestions.length === 0 && allQuestions.length > 0) {
+                selectedQuestions = [allQuestions[0]]; 
+              }
+            } else {
+              // ANY OTHER TEST TYPE: Show ALL questions at once
+              selectedQuestions = [...allQuestions];
             }
 
             return {
@@ -416,7 +416,7 @@ const TestSeries = () => {
       let finalResultId;
 
       if (existingResultId) {
-        const docRef = firebase.firestore().collection('yttestseriesresult').doc(existingResultId);
+        const docRef = firebase.firestore().collection('sengarcarreryttestseriesresult').doc(existingResultId);
         
         await docRef.update({
            attempts: firebase.firestore.FieldValue.arrayUnion(currentAttemptData),
@@ -451,7 +451,7 @@ const TestSeries = () => {
           lastAttemptAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        const docRef = await firebase.firestore().collection('yttestseriesresult').add(testSubmission);
+        const docRef = await firebase.firestore().collection('sengarcarreryttestseriesresult').add(testSubmission);
         finalResultId = docRef.id;
       }
       

@@ -43,7 +43,7 @@ const TestResult = () => {
       try {
         if (!id) return;
         const db = firebase.firestore();
-        const testRef = doc(db, 'yttestseriesresult', id);
+        const testRef = doc(db, 'sengarcarreryttestseriesresult', id);
         const testSnap = await getDoc(testRef);
 
         if (testSnap.exists()) {
@@ -54,7 +54,7 @@ const TestResult = () => {
             setSelectedAttemptIndex(resultData.attempts.length - 1);
           }
 
-          const leaderboardRef = collection(db, 'yttestseriesresult');
+          const leaderboardRef = collection(db, 'sengarcarreryttestseriesresult');
           const q = query(
             leaderboardRef,
             where("class", "==", resultData.class),

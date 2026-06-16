@@ -17,7 +17,7 @@ const Homenotes = () => {
       
       try {
         const db = firebase.firestore();
-        const notesRef = collection(db, 'notes');
+        const notesRef = collection(db, 'sengarcarrernotes');
         const q = query(
           notesRef,
           where('classLevel', '==', classLevel),

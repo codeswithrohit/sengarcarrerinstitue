@@ -1,8 +1,17 @@
 import AdminNav from '@/components/AdminNav'
 import React, { useState, useEffect } from 'react';
 import { firebase } from '../../Firebase/config';
+import { useRouter } from 'next/router';
+import { FiLock } from 'react-icons/fi';
 
 const Index = () => {
+  const router = useRouter();
+  
+  // --- AUTHENTICATION & PERMISSIONS STATE ---
+  const [adminUser, setAdminUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // --- DASHBOARD DATA STATE ---
   const [students, setStudents] = useState([]);
   const [filteredStudents, setFilteredStudents] = useState([]);
   const [todayCount, setTodayCount] = useState(0);
@@ -20,10 +29,64 @@ const Index = () => {
     filterType: 'none' // 'none', 'single', 'range'
   });
 
+  // --- CHECK AUTHENTICATION & FETCH LIVE PERMISSIONS ---
   useEffect(() => {
+    const unsubscribe = firebase.auth().onAuthStateChanged(async (user) => {
+      if (!user) {
+        // Not logged in via Firebase Auth
+        router.push('/Admin/login');
+        return;
+      }
+
+      try {
+        const db = firebase.firestore();
+        // Fetch the corresponding admin user document from Firestore
+        const adminSnapshot = await db.collection('sengarcarreradminUsers')
+          .where('email', '==', user.email)
+          .get();
+
+        if (adminSnapshot.empty) {
+          // Logged in via Auth, but no record in adminUsers collection
+          await firebase.auth().signOut();
+          router.push('/Admin/login');
+          return;
+        }
+
+        const adminData = adminSnapshot.docs[0].data();
+
+        // Check if the admin is verified
+        if (adminData.isVerified !== true) {
+          await firebase.auth().signOut();
+          router.push('/Admin/login');
+          return;
+        }
+
+        // Store live permissions in state
+        setAdminUser({ id: adminSnapshot.docs[0].id, ...adminData });
+        setAuthLoading(false);
+
+      } catch (error) {
+        console.error("Authorization check error:", error);
+        await firebase.auth().signOut();
+        router.push('/Admin/login');
+      }
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, [router]);
+
+  // --- FETCH DASHBOARD DATA (ONLY IF AUTHORIZED) ---
+  useEffect(() => {
+    // Only fetch if authenticated and they have dashboard view access
+    if (authLoading || !adminUser || !adminUser.viewDashboard) {
+      setLoading(false);
+      return;
+    }
+
     const fetchStudents = async () => {
       try {
-        const snapshot = await firebase.firestore().collection('admissions').orderBy('createdAt', 'desc').get();
+        const snapshot = await firebase.firestore().collection('sengarcarreradmissions').orderBy('createdAt', 'desc').get();
         const studentsData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -35,6 +98,7 @@ const Index = () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const todaysStudents = studentsData.filter(student => {
+          if (!student.createdAt) return false;
           const studentDate = new Date(student.createdAt.seconds * 1000);
           return studentDate >= today;
         });
@@ -76,7 +140,7 @@ const Index = () => {
     };
 
     fetchStudents();
-  }, []);
+  }, [authLoading, adminUser]);
 
   // Filter students to show only those with installments in current month or later
   useEffect(() => {
@@ -91,6 +155,7 @@ const Index = () => {
 
       // Check if any installment is in current month or later
       return student.fees.installments.some(installment => {
+        if (!installment.date) return false;
         const installmentDate = new Date(installment.date);
         return (
           (installmentDate.getFullYear() === currentYear && installmentDate.getMonth() >= currentMonth) ||
@@ -105,15 +170,14 @@ const Index = () => {
   // Apply date filter when user selects specific dates
   useEffect(() => {
     if (dateFilter.filterType === 'none') {
-      // Reset to default filter (current month or later)
       const today = new Date();
       const currentMonth = today.getMonth();
       const currentYear = today.getFullYear();
 
       const filtered = students.filter(student => {
         if (!student.fees || !student.fees.installments) return false;
-
         return student.fees.installments.some(installment => {
+          if (!installment.date) return false;
           const installmentDate = new Date(installment.date);
           return (
             (installmentDate.getFullYear() === currentYear && installmentDate.getMonth() >= currentMonth) ||
@@ -130,6 +194,7 @@ const Index = () => {
       if (!student.fees || !student.fees.installments) return false;
 
       return student.fees.installments.some(installment => {
+        if (!installment.date) return false;
         const installmentDate = new Date(installment.date);
         installmentDate.setHours(0, 0, 0, 0);
 
@@ -151,29 +216,6 @@ const Index = () => {
     setFilteredStudents(filtered);
   }, [dateFilter, students]);
 
-  const handleDateFilterChange = (e) => {
-    const { name, value } = e.target;
-    setDateFilter(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const applyFilter = (filterType) => {
-    setDateFilter(prev => ({
-      ...prev,
-      filterType
-    }));
-  };
-
-  const clearFilter = () => {
-    setDateFilter({
-      startDate: '',
-      endDate: '',
-      filterType: 'none'
-    });
-  };
-
   // Format currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -189,10 +231,11 @@ const Index = () => {
     if (!student.fees || !student.fees.installments) return null;
     
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Set time to midnight for accurate date comparison
+    today.setHours(0, 0, 0, 0);
     
     const upcomingInstallments = student.fees.installments
       .filter(installment => {
+        if (!installment.date) return false;
         const installmentDate = new Date(installment.date);
         installmentDate.setHours(0, 0, 0, 0);
         return installmentDate >= today;
@@ -205,7 +248,6 @@ const Index = () => {
   // Get total paid amount for a student
   const getTotalPaidForStudent = (student) => {
     if (!student.fees || !student.fees.installments) return 0;
-    
     return student.fees.installments
       .filter(inst => inst.paid)
       .reduce((sum, inst) => sum + parseFloat(inst.amount), 0);
@@ -218,8 +260,33 @@ const Index = () => {
     return totalPaid >= totalFees;
   };
 
+  // --- RENDER LOADING STATE ---
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-700"></div>
+      </div>
+    );
+  }
+
+  // --- RENDER ACCESS DENIED STATE ---
+  if (!adminUser?.viewDashboard) {
+    return (
+      <div className="min-h-screen bg-gray-100">
+        <AdminNav />
+        <div className="p-6 md:ml-64 flex flex-col items-center justify-center mt-20">
+          <div className="bg-red-50 text-red-600 p-8 rounded-2xl border border-red-200 shadow-sm flex flex-col items-center max-w-md text-center">
+            <FiLock className="h-12 w-12 mb-4 text-red-500" />
+            <h2 className="text-xl font-black mb-2">Access Denied</h2>
+            <p className="text-sm font-medium">You do not have permission to view the Dashboard overview. Please contact a Super Admin if you believe this is a mistake.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 pb-20">
       <AdminNav />
       
       <div className="p-6 md:ml-64">
@@ -227,7 +294,7 @@ const Index = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
-            <p className="text-sm text-gray-600 mt-1">Welcome back! Here's what's happening today.</p>
+            <p className="text-sm text-gray-600 mt-1">Welcome back, {adminUser.name}! Here's what's happening today.</p>
           </div>
           <div className="flex items-center space-x-4 mt-4 md:mt-0">
             <span className="text-sm text-gray-600">Last updated: {new Date().toLocaleString()}</span>
@@ -285,244 +352,206 @@ const Index = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Total Fees</p>
-                  <p className="text-2xl font-bold mt-2 text-gray-800">{formatCurrency(stats.totalFees)}</p>
+            {/* GRANNULAR PERMISSION: View Dashboard Fees Stats */}
+            {adminUser?.viewDashboardFeesStats && (
+              <>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Total Fees</p>
+                      <p className="text-2xl font-bold mt-2 text-gray-800">{formatCurrency(stats.totalFees)}</p>
+                    </div>
+                    <div className="bg-purple-100 p-2 rounded-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-purple-100 p-2 rounded-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Total Paid</p>
-                  <p className="text-2xl font-bold mt-2 text-gray-800">{formatCurrency(stats.totalPaid)}</p>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Total Paid</p>
+                      <p className="text-2xl font-bold mt-2 text-gray-800">{formatCurrency(stats.totalPaid)}</p>
+                    </div>
+                    <div className="bg-green-100 p-2 rounded-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-green-100 p-2 rounded-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Total Unpaid</p>
-                  <p className="text-2xl font-bold mt-2 text-gray-800">{formatCurrency(stats.totalUnpaid)}</p>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Total Unpaid</p>
+                      <p className="text-2xl font-bold mt-2 text-gray-800">{formatCurrency(stats.totalUnpaid)}</p>
+                    </div>
+                    <div className="bg-red-100 p-2 rounded-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-red-100 p-2 rounded-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* Fee Collections Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-          <div className="px-6 py-4 border-b border-gray-200 bg-blue-700 flex flex-col md:flex-row justify-between items-start md:items-center">
-            <h2 className="text-lg font-semibold text-white mb-4 md:mb-0">Upcoming Fee Collections (Current Month & Later)</h2>
-            <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-4 w-full md:w-auto">
-              {/* Date Filter Controls */}
-              {/* <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 w-full md:w-auto">
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="startDate" className="text-sm text-blue-100">From:</label>
-                  <input
-                    type="date"
-                    id="startDate"
-                    name="startDate"
-                    value={dateFilter.startDate}
-                    onChange={handleDateFilterChange}
-                    className="px-2 py-1 text-sm rounded border border-gray-300"
-                  />
+        {/* GRANNULAR PERMISSION: View Upcoming Fees Collections Table */}
+        {adminUser?.viewUpcomingFees && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+            <div className="px-6 py-4 border-b border-gray-200 bg-blue-700 flex flex-col md:flex-row justify-between items-start md:items-center">
+              <h2 className="text-lg font-semibold text-white mb-4 md:mb-0">Upcoming Fee Collections (Current Month & Later)</h2>
+              <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-4 w-full md:w-auto">
+                <span className="text-sm text-blue-100">
+                  Showing {filteredStudents.length} of {students.length} students
+                </span>
+              </div>
+            </div>
+            
+            {loading ? (
+              <div className="p-6">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-16 bg-gray-100 rounded"></div>
+                  ))}
                 </div>
               </div>
-              
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => applyFilter('single')}
-                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-800 transition-colors"
-                  disabled={!dateFilter.startDate}
-                >
-                  Filter by Date
-                </button>
-                <button
-                  onClick={clearFilter}
-                  className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-800 transition-colors"
-                >
-                  Clear Filter
-                </button>
-              </div> */}
-              
-              <span className="text-sm text-blue-100">
-                Showing {filteredStudents.length} of {students.length} students
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-blue-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Name</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Class</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Batch</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Mobile</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Total Fees</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Paid Amount</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Next Installment</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredStudents.length > 0 ? (
+                      filteredStudents.map((student) => {
+                        const nextInstallment = getNextInstallment(student);
+                        const totalPaid = getTotalPaidForStudent(student);
+                        const totalFees = student.fees?.totalFees || 0;
+                        const isPaid = isFullyPaid(student);
+                        
+                        // Determine status based on next installment's paid status
+                        let nextInstallmentStatus = 'No installments';
+                        let statusColor = 'gray';
+                        
+                        if (nextInstallment) {
+                          nextInstallmentStatus = nextInstallment.paid ? 'Paid' : 'Unpaid';
+                          statusColor = nextInstallment.paid ? 'green' : 'red';
+                        } else if (isPaid) {
+                          nextInstallmentStatus = 'All Paid';
+                          statusColor = 'green';
+                        }
+
+                        return (
+                          <tr 
+                            key={student.id} 
+                            className={`hover:bg-gray-50 ${isPaid ? 'bg-green-50' : ''}`}
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-10 w-10">
+                                  {student.photoURL ? (
+                                    <img className="h-10 w-10 rounded-full object-cover" src={student.photoURL} alt={student.name} />
+                                  ) : (
+                                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-medium text-gray-900">{student.name}</div>
+                                  <div className="text-sm text-gray-500">{student.studentid}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {student.previousClass || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {student.targetClass || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {student.mobileNumber || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                              {formatCurrency(totalFees)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                              {formatCurrency(totalPaid)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {nextInstallment ? (
+                                <div>
+                                  <div>{new Date(nextInstallment.date).toLocaleDateString()}</div>
+                                  <div className="font-medium">{formatCurrency(nextInstallment.amount)}</div>
+                                  <div className={`text-xs mt-1 ${
+                                    nextInstallment.paid ? 'text-green-600' : 'text-red-600'
+                                  }`}>
+                                    {nextInstallment.paid ? (
+                                      <>
+                                        <span>Paid on {new Date(nextInstallment.paidDate).toLocaleDateString()}</span>
+                                        <span className="ml-1">({nextInstallment.mode})</span>
+                                      </>
+                                    ) : 'Pending'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className={isPaid ? "text-green-600" : "text-gray-400"}>
+                                  {nextInstallmentStatus}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                statusColor === 'green' ? 'bg-green-100 text-green-800' :
+                                statusColor === 'red' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {nextInstallmentStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="8" className="px-6 py-4 text-center text-sm text-gray-500">
+                          No student records found with upcoming installments
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+              <span className="text-sm text-gray-600">
+                Showing {filteredStudents.length} of {students.length} records
               </span>
             </div>
           </div>
-          
-          {loading ? (
-            <div className="p-6">
-              <div className="animate-pulse space-y-4">
-                <div className="h-10 bg-gray-200 rounded"></div>
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="h-16 bg-gray-100 rounded"></div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-blue-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Name</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Class</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Batch</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Mobile</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Total Fees</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Paid Amount</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Next Installment</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredStudents.length > 0 ? (
-                    filteredStudents.map((student) => {
-                      const nextInstallment = getNextInstallment(student);
-                      const totalPaid = getTotalPaidForStudent(student);
-                      const totalFees = student.fees?.totalFees || 0;
-                      const isPaid = isFullyPaid(student);
-                      
-                      // Determine status based on next installment's paid status
-                      let nextInstallmentStatus = 'No installments';
-                      let statusColor = 'gray';
-                      
-                      if (nextInstallment) {
-                        nextInstallmentStatus = nextInstallment.paid ? 'Paid' : 'Unpaid';
-                        statusColor = nextInstallment.paid ? 'green' : 'red';
-                      } else if (isPaid) {
-                        nextInstallmentStatus = 'All Paid';
-                        statusColor = 'green';
-                      }
-
-                      return (
-                        <tr 
-                          key={student.id} 
-                          className={`hover:bg-gray-50 ${isPaid ? 'bg-green-50' : ''}`}
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0 h-10 w-10">
-                                {student.photoURL ? (
-                                  <img className="h-10 w-10 rounded-full object-cover" src={student.photoURL} alt={student.name} />
-                                ) : (
-                                  <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                    </svg>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">{student.name}</div>
-                                <div className="text-sm text-gray-500">{student.studentid}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {student.previousClass || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {student.targetClass || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {student.mobileNumber || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
-                            {formatCurrency(totalFees)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
-                            {formatCurrency(totalPaid)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {nextInstallment ? (
-                              <div>
-                                <div>{new Date(nextInstallment.date).toLocaleDateString()}</div>
-                                <div className="font-medium">{formatCurrency(nextInstallment.amount)}</div>
-                                <div className={`text-xs mt-1 ${
-                                  nextInstallment.paid ? 'text-green-600' : 'text-red-600'
-                                }`}>
-                                  {nextInstallment.paid ? (
-                                    <>
-                                      <span>Paid on {new Date(nextInstallment.paidDate).toLocaleDateString()}</span>
-                                      <span className="ml-1">({nextInstallment.mode})</span>
-                                    </>
-                                  ) : 'Pending'}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className={isPaid ? "text-green-600" : "text-gray-400"}>
-                                {nextInstallmentStatus}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              statusColor === 'green' ? 'bg-green-100 text-green-800' :
-                              statusColor === 'red' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {nextInstallmentStatus}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="8" className="px-6 py-4 text-center text-sm text-gray-500">
-                        No student records found with upcoming installments
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-          
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-            <span className="text-sm text-gray-600">
-              Showing {filteredStudents.length} of {students.length} records
-            </span>
-            {/* <div className="flex space-x-4">
-              <button className="text-blue-700 hover:text-blue-900 text-sm font-medium flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add New Payment
-              </button>
-              <button className="text-blue-700 hover:text-blue-900 text-sm font-medium flex items-center">
-                Export to Excel
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-              </button>
-            </div> */}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )
 }
 
-export default Index
+export default Index;
