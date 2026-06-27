@@ -37,6 +37,7 @@ const Students = () => {
     dob: "",
     gender: "",
     bloodGroup: "",
+    centerName: "",
     previousSchool: "",
     previousClass: "",
     previousResult: "",
@@ -84,6 +85,11 @@ const Students = () => {
   const batchOptions = ["Online", "Offline"];
   const statusOptions = ["Pending", "Active"];
   const genderOptions = ["Male", "Female", "Other"];
+  const centerOptions = [
+    "SAI COMPLEX BENIPUR PAHARIYA",
+    "NEAR NDRF BUILDING PAHARIYA",
+    "DAULATPUR ROAD(OPP. PNB ATM) PANDEYPUR"
+  ];
 
   // --- Helpers ---
   const getJsDate = (value) => {
@@ -164,6 +170,7 @@ const Students = () => {
       dob: student?.dob || "",
       gender: student?.gender || "",
       bloodGroup: student?.bloodGroup || "",
+      centerName: student?.centerName || "",
       previousSchool: student?.previousSchool || "",
       previousClass: student?.previousClass || "",
       previousResult: student?.previousResult || "",
@@ -355,6 +362,7 @@ const Students = () => {
       dob: "",
       gender: "",
       bloodGroup: "",
+      centerName: "",
       previousSchool: "",
       previousClass: "",
       previousResult: "",
@@ -416,6 +424,7 @@ const Students = () => {
         dob: editStudentForm.dob,
         gender: editStudentForm.gender,
         bloodGroup: editStudentForm.bloodGroup.trim(),
+        centerName: editStudentForm.centerName.trim(),
         previousSchool: editStudentForm.previousSchool.trim(),
         previousClass: editStudentForm.previousClass.trim(),
         previousResult: editStudentForm.previousResult,
@@ -478,6 +487,9 @@ const Students = () => {
       `*Sengar Carrer Institute - Student Portal Access* 🎓\n\n` +
       `Dear ${student.name},\n` +
       `Here are your portal login credentials:\n\n` +
+      `*🏫 Academic Details:*\n` +
+      `• *Center:* ${student.centerName || "N/A"}\n` +
+      `• *Class:* ${student.targetClass || "N/A"}\n\n` +
       `*🔐 Student Portal Access:*\n` +
       `• *Login Email:* ${student.portalLoginEmail || "N/A"}\n` +
       `• *Password:* ${student.password || "N/A"}\n\n` +
@@ -954,6 +966,9 @@ const Students = () => {
                     Contact
                   </th>
                   <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Center
+                  </th>
+                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     Batch
                   </th>
                   <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -972,7 +987,7 @@ const Students = () => {
                 {currentStudents.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="6"
+                      colSpan="7"
                       className="px-6 py-12 text-center text-sm font-bold text-slate-400"
                     >
                       No students found matching your filters.
@@ -1018,6 +1033,12 @@ const Students = () => {
                         </div>
                         <div className="text-[10px] font-bold text-slate-400 mt-0.5">
                           Father: {student.fatherMobile || "N/A"}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-xs text-slate-700 font-bold truncate max-w-[150px]" title={student.centerName}>
+                          {student.centerName || "N/A"}
                         </div>
                       </td>
 
@@ -1464,7 +1485,7 @@ const Students = () => {
                             </td>
                           </tr>
 
-                          <tr>
+                          <tr className="border-b border-slate-100">
                             <th className="px-5 py-3 bg-slate-50/50 font-bold text-slate-600 border-r border-slate-100 text-xs">
                               Admission Date
                             </th>
@@ -1477,6 +1498,15 @@ const Students = () => {
                             <td className="px-5 py-3 font-semibold text-slate-800">
                               {selectedStudent.Batch || "N/A"} /{" "}
                               {selectedStudent.Status || "Pending"}
+                            </td>
+                          </tr>
+
+                          <tr>
+                            <th className="px-5 py-3 bg-slate-50/50 font-bold text-slate-600 border-r border-slate-100 text-xs">
+                              Center Name
+                            </th>
+                            <td colSpan="3" className="px-5 py-3 font-bold text-indigo-600">
+                              {selectedStudent.centerName || "N/A"}
                             </td>
                           </tr>
                         </tbody>
@@ -1544,6 +1574,13 @@ const Students = () => {
                           }
                         />
 
+                        <FieldSelect
+                          label="Center Name"
+                          value={editStudentForm.centerName}
+                          options={centerOptions}
+                          onChange={(e) => handleEditFormChange("centerName", e.target.value)}
+                        />
+
                         <FieldInput
                           label="Previous School"
                           value={editStudentForm.previousSchool}
@@ -1602,7 +1639,6 @@ const Students = () => {
 
                         <FieldInput
                           label="Portal Login Email"
-                          
                           value={editStudentForm.portalLoginEmail}
                           onChange={(e) =>
                             handleEditFormChange("portalLoginEmail", e.target.value)
